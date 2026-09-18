@@ -1,0 +1,5 @@
+{"ts":"2026-08-20T14:02:11.482Z","subject":"calc2","node":"riemann-sum","correct":true,"dontKnow":false}
+{"ts":"2026-08-20T14:09:55.001Z","subject":"calc2","node":"definite-integral","correct":false,"dontKnow":false,"note":"mixed up the limit direction"}
+{"ts":"2026-08-20T14:18:03.117Z","subject":"calc2","node":"definite-integral","correct":true,"dontKnow":false}
+{"ts":"2026-09-02T09:31:44.900Z","subject":"calc2","node":"improper-integral","correct":false,"dontKnow":true}
+{"ts":"2026-09-02T09:40:12.335Z","subject":"finance","node":"time-value-of-money","correct":true,"dontKnow":false}

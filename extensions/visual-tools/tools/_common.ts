@@ -10,13 +10,14 @@
 
 import { spawn } from "node:child_process"
 import { tmpdir } from "node:os"
-import { basename, dirname, join } from "node:path"
+import { basename, delimiter, dirname, join } from "node:path"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 
-// rsvg-convert lives under MacPorts (/opt/local/bin); magick/gs under
-// /usr/local/bin; Homebrew under /opt/homebrew/bin. Augment PATH so the child
-// pi process (which may have inherited a thin PATH) still resolves them.
-export const EXTRA_PATH = ["/opt/local/bin", "/usr/local/bin", "/opt/homebrew/bin"]
+// Augment PATH so the child pi process (which may have inherited a thin PATH)
+// still resolves rsvg-convert / magick. macOS scatters them across MacPorts
+// (/opt/local/bin) and Homebrew (/opt/homebrew/bin); Linux keeps them in the
+// standard bin dirs, with snap packages off in /snap/bin.
+export const EXTRA_PATH = ["/opt/local/bin", "/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/snap/bin"]
 
 // Transient session/preview files live under the OS temp dir (NOT the vault),
 // so only the PUBLISHED PNG ever lands inside the Obsidian vault (viz/).
@@ -24,12 +25,39 @@ export const STAGING_ROOT = join(tmpdir(), "pi-visual-tools")
 export const FILES_DIRNAME = "viz"
 
 export const CHROME_CANDIDATES = [
+  // macOS
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  // Linux / WSL
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/snap/bin/chromium",
 ]
 
+const CHROME_BINARIES = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+
+/**
+ * Locate a browser for mermaid-cli to drive. Checked in priority order:
+ * an explicit env override, then known install paths, then a PATH scan —
+ * distro and nix packages land in directories we cannot enumerate up front.
+ * Returning undefined is not fatal: the caller omits `executablePath` and
+ * lets puppeteer try its own bundled browser.
+ */
 export function findChrome(): string | undefined {
+  const override = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH
+  if (override && existsSync(override)) return override
+
   for (const c of CHROME_CANDIDATES) if (existsSync(c)) return c
+
+  for (const dir of [...EXTRA_PATH, ...(process.env.PATH ?? "").split(delimiter)]) {
+    if (!dir) continue
+    for (const bin of CHROME_BINARIES) {
+      const full = join(dir, bin)
+      if (existsSync(full)) return full
+    }
+  }
   return undefined
 }
 
@@ -46,7 +74,7 @@ export function run(
   opts: { cwd: string; timeoutMs: number; env?: Record<string, string> },
 ): Promise<RunResult> {
   return new Promise((resolveRun) => {
-    const augmentedPath = [...EXTRA_PATH, process.env.PATH ?? ""].join(":")
+    const augmentedPath = [...EXTRA_PATH, process.env.PATH ?? ""].join(delimiter)
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
       env: { ...process.env, ...(opts.env ?? {}), PATH: augmentedPath },
@@ -145,4 +173,4 @@ export function publish(pngPath: string, slug: string): { filename: string; path
   return { filename, path: dest }
 }
 
-export { basename, dirname, join, existsSync, mkdirSync, readFileSync, writeFileSync }
+export { basename, delimiter, dirname, join, existsSync, mkdirSync, readFileSync, writeFileSync }

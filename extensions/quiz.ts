@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	Editor,
 	type EditorTheme,
@@ -7,7 +7,7 @@ import {
 	matchesKey,
 	truncateToWidth,
 	wrapTextWithAnsi,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -79,6 +79,8 @@ interface QuizResultDetails {
 	note?: string; // optional free-text from the always-present note field (any answer)
 	explanation?: string;
 	message?: string;
+	subject?: string; // graph subject this question tested, when tagged
+	node?: string; // graph node id this question tested, when tagged
 }
 
 const OptionSchema = Type.Object({
@@ -116,6 +118,18 @@ const QuizParams = Type.Object({
 		Type.Boolean({
 			description:
 				"Defaults to true: options are randomly reordered before display so the correct answer isn't always in the same position. Set to false only when option order is meaningful (e.g. ordered numeric values, or an 'All/None of the above' option that must stay last).",
+		}),
+	),
+	subject: Type.Optional(
+		Type.String({
+			description:
+				"Optional. The domain graph this question belongs to, e.g. \"calc2\" — the `subject` field of graphs/<subject>.md. Pass together with `node` to record the outcome in the mastery ledger. Omit for questions not tied to a stored graph.",
+		}),
+	),
+	node: Type.Optional(
+		Type.String({
+			description:
+				"Optional. The graph node id this question tests, e.g. \"riemann-sum\" — must match an `id` in that subject's node list exactly. Pass together with `subject`.",
 		}),
 	),
 });
@@ -234,8 +248,10 @@ function buildStructuredResult(
 	options?: DisplayedOption[],
 	dontKnow?: boolean,
 	note?: string,
+	subject?: string,
+	node?: string,
 ): QuizResultDetails {
-	return { status, question, context, mode, answers, correctIndices, options, correct, dontKnow, note, explanation, message };
+	return { status, question, context, mode, answers, correctIndices, options, correct, dontKnow, note, explanation, message, subject, node };
 }
 
 function cancelledResult(question: string, mode: QuizMode, correctIndices: number[], context?: string) {
@@ -266,6 +282,8 @@ function buildResult(
 	response: QuizResponse,
 	correctIndices: number[],
 	explanation: string | undefined,
+	subject?: string,
+	node?: string,
 ) {
 	const { dontKnow, note, answers } = response;
 	const selectedIndices = answers.map((a) => a.index);
@@ -304,6 +322,8 @@ function buildResult(
 			displayedOptions,
 			dontKnow,
 			note,
+			subject,
+			node,
 		),
 	};
 }
@@ -897,6 +917,7 @@ export default function quiz(pi: ExtensionAPI) {
 			"Options are shuffled before display by default, so don't worry about which position you list the correct answer in. Set shuffle: false only when option order is meaningful (ordered values, or an 'All/None of the above' option that must stay last).",
 			"To probe nuance, ask several quick quiz questions and adapt each one based on the previous answers, rather than writing one giant question.",
 			"Don't leak the answer through formatting: keep option phrasing/length even and don't hint which is correct.",
+			"When the question tests a node in a stored domain graph, pass `subject` and `node` (the graph's subject and the node's exact id). That records the outcome in the mastery ledger so a later review session knows what has decayed. Omit both for questions not tied to a stored graph — nothing is recorded and behaviour is unchanged.",
 		],
 		parameters: QuizParams,
 
@@ -964,7 +985,17 @@ export default function quiz(pi: ExtensionAPI) {
 				if (!response) {
 					return cancelledResult(params.question, mode, correctIndices, context);
 				}
-				return buildResult(params.question, context, mode, options, response, correctIndices, explanation);
+				return buildResult(
+					params.question,
+					context,
+					mode,
+					options,
+					response,
+					correctIndices,
+					explanation,
+					params.subject,
+					params.node,
+				);
 			});
 		},
 

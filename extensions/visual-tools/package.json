@@ -8,7 +8,7 @@
     "@mermaid-js/mermaid-cli": "^11.4.2"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "file:/Users/amos/.nvm/versions/node/v24.14.0/lib/node_modules/@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-coding-agent": "^0.85.1",
     "@sinclair/typebox": "^0.34.0",
     "typescript": "^5.5.0"
   },

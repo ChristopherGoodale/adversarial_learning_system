@@ -144,3 +144,26 @@ Everything written in a session is rendered to him through Obsidian, which rende
 - Centered display math: `$$` fenced on its own lines, e.g. `$$\n f(x) \n$$`
 
 If LaTeX can be used, it should be. Write $f(x) = x^2$, not `f(x) = x^2`.
+
+## Persisting the graph (so later sessions can build on this one)
+
+Everything above is unchanged by this section — the pedagogy is the pedagogy. This adds one thing: **write the graph down**, so a session weeks from now can review what decayed or connect this subject to another instead of starting cold.
+
+Load the `graph` skill for the file format and merge rules before touching anything under `graphs/`.
+
+**After he okays the Phase 2 plan**, merge that dependency map into `graphs/<subject>.md`:
+
+- Match by node id, append what's new, and never rewrite the file wholesale — it is cumulative across every session on the subject.
+- Give each node a stable kebab-case `id` and mark it `unconditional-truth` or `derived`, matching how you actually treated it in the plan.
+- **Never rename an existing id.** Ledger history is keyed to it, and a rename silently erases his record on that node.
+
+**During Phase 3**, pass `subject` and `node` on every `quiz` call so each outcome lands in the mastery ledger:
+
+```
+quiz(question=..., options=[...], correctAnswer=..., explanation=...,
+     subject="calc2", node="riemann-sum")
+```
+
+This applies to the Phase 3 quiz-checks, which confirm a node landed. Phase 1a probe questions are usually mapping his existing edge rather than testing a node you have just built — tag them when they line up with a real node in the graph, and leave them untagged when they don't. An untagged quiz records nothing and behaves exactly as it always has.
+
+Then the review skill can find what rotted, and the synthesize skill can check he actually holds a node before hanging a cross-domain bridge off it.
