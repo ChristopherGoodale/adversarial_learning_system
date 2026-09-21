@@ -52,12 +52,42 @@ node skills/graph/validate.mjs graphs/
 
 You don't need a separate project per subject: one vault, one `.pi`, one graph file per subject.
 
-## Install
+## Two implementations
+
+The same teaching system runs on two harnesses, both maintained here. See [PORTING.md](PORTING.md) for the file pairs, the tool mapping, and the three differences that aren't cosmetic.
+
+| | [pi](https://github.com/earendil-works/pi) | [Claude Code](https://claude.com/claude-code) |
+|---|---|---|
+| Config tree | `skills/`, `agents/`, `extensions/` | `.claude/` |
+| Installs as | `.pi/` in your vault | `.claude/` in your vault |
+| Platform | macOS / Linux / WSL | Windows / macOS / Linux, native |
+| Graded quiz UI | Yes — custom TUI extension | No — questions are graded in chat |
+| Web research | Needs a separate package | Built in |
+
+**Claude Code is the easier start**, particularly on Windows: no WSL, no tmux, no second Node install, and the researcher works out of the box — which matters, because the researcher is what verifies cross-domain bridges before they get taught.
+
+## Install — Claude Code
+
+Your vault is an ordinary folder; the config goes inside it.
+
+```bash
+mkdir MyLearning && cd MyLearning
+git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git /tmp/als
+cp -r /tmp/als/.claude .
+mkdir graphs && touch calc2.md
+claude
+```
+
+Then just say what you want: *"teach me integration by parts"*, *"review calc 2"*, or *"connect calc 2 and finance"*. Open the same folder as an Obsidian vault to read lessons rendered, with maths and diagrams.
+
+Keep your vault out of version control — graphs and lesson notes are personal, the config is what's shared.
+
+## Install — pi
 
 This repo **is** a `.pi` directory. From your learning project's root:
 
 ```bash
-git clone https://github.com/amosblomqvist/learn .pi
+git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git .pi
 ```
 
 Then open pi in that directory. (Or copy the pieces you want into your existing project config.)
