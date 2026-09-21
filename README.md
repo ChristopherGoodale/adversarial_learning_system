@@ -2,33 +2,39 @@
 
 [![video](assets/thumbnail.png)](https://www.youtube.com/watch?v=kzcI5F4tGiU)
 
-My AI learning system from this video: [How I Use AI to Learn Things](https://www.youtube.com/watch?v=kzcI5F4tGiU).
+An AI learning system, forked from [amosblomqvist/learn](https://github.com/amosblomqvist/learn) and the video [How I Use AI to Learn Things](https://www.youtube.com/watch?v=kzcI5F4tGiU).
 
-This is a personal system I built for myself, shared as-is. Built as a pi configuration: the teaching philosophy encoded in a skill, a few small extensions, and agent definitions.
+The original encoded a teaching philosophy as a [pi](https://github.com/earendil-works/pi) configuration. This fork adds two more modes — reviewing a subject for decay, and teaching across two subjects — persists what you've learned to disk so later sessions build on earlier ones, and adds a **Claude Code implementation that runs natively on Windows**.
 
-## What's in it
+## Quick start (Claude Code, Windows / macOS / Linux)
 
-- `skills/teach/` — the philosophy and the process
-- `skills/review/` — revisit a subject you already studied: find what decayed, re-teach only that
-- `skills/synthesize/` — teach across two subjects, but only where the connection survives verification
-- `skills/graph/` — the on-disk format for persisted graphs, bridges, and the mastery ledger
-- `skills/visualize/` — adds a correct, minimal diagram to a lesson when an idea is clearer as a picture
-- `extensions/ask-user-question/` — the agent asks you questions through a UI popup
-- `extensions/quiz/` — graded questions with instant feedback (✓/✗, correct answer, explanation)
-- `extensions/md-log/` — link a markdown file to the session
-- `extensions/mastery-ledger/` — records graph-tagged quiz outcomes so review knows what decayed
-- `extensions/visual-tools/` — tools for visualization subagents
-- `agents/` — `researcher`, `svg-maker`, `mermaid-maker`: the subagents the system delegates to
+Your vault is an ordinary folder. The config goes inside it.
+
+```bash
+mkdir MyLearning && cd MyLearning
+git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git /tmp/als
+cp -r /tmp/als/.claude .
+mkdir graphs && touch calc2.md
+claude
+```
+
+On Windows PowerShell, replace `/tmp/als` with `$env:TEMP\als` and `cp -r` with `Copy-Item -Recurse`.
+
+Then say what you want — *"teach me integration by parts"*, *"review calc 2"*, *"connect calc 2 and finance"*. Open the same folder as an Obsidian vault to read the lessons rendered, with maths and diagrams.
+
+Nothing else to install: subagents and web search are built into Claude Code.
+
+**Keep your vault out of version control.** Graphs and lesson notes are personal; the config is what's shared.
 
 ## Three modes
 
 | Mode | Say | What happens |
 |---|---|---|
-| **Learn** | "teach me integration by parts" | The original probe → plan → teach loop. Now also writes its dependency map to `graphs/<subject>.md`. |
+| **Learn** | "teach me integration by parts" | The original probe → plan → teach loop, now also writing its dependency map to `graphs/<subject>.md`. |
 | **Review** | "review calc 2" | Ranks the stored graph by decay risk, probes to find what rotted, re-teaches only those nodes. |
-| **Combine** | "connect calc 2 and finance" | Finds a bridge between two graphs, **verifies it with the researcher before teaching it**, then teaches the joined path. |
+| **Combine** | "connect calc 2 and finance" | Finds a bridge between two graphs, **verifies it before teaching it**, then teaches the joined path. |
 
-Mode 1 is the system as originally built — the pedagogy is untouched. Modes 2 and 3 are additive and depend on the graph files mode 1 now leaves behind.
+Mode 1 is the system as originally built — the pedagogy is untouched. Modes 2 and 3 are additive and depend on the graph files mode 1 leaves behind.
 
 ### Why bridges are verified, not reasoned
 
@@ -41,84 +47,90 @@ graphs/
   calc2.md          # nodes and edges for one subject
   chinese.md
   _bridges.md       # cross-domain connections, single source of truth
-  .mastery.jsonl    # append-only quiz outcomes, written automatically
+  .mastery.jsonl    # append-only quiz outcomes
 ```
 
-The graph files are plain markdown with a mermaid body, so they render and stay editable in Obsidian. The ledger is owned by the extension — don't hand-edit it. Validate any time with:
+Graph files are plain markdown with a mermaid body, so they render and stay editable in Obsidian. Validate any time:
 
 ```bash
-node skills/graph/validate.mjs graphs/
+node .claude/skills/graph/validate.mjs graphs/     # Claude Code
+node .pi/skills/graph/validate.mjs graphs/         # pi
 ```
 
-You don't need a separate project per subject: one vault, one `.pi`, one graph file per subject.
+It checks that node ids are unique and stable, dependencies resolve, the mermaid body agrees with the frontmatter in both directions, bridge endpoints point at real nodes, and `verified` bridges actually carry a source.
 
-## Two implementations
+You don't need a separate project per subject: one vault, one config, one graph file per subject.
 
-The same teaching system runs on two harnesses, both maintained here. See [PORTING.md](PORTING.md) for the file pairs, the tool mapping, and the three differences that aren't cosmetic.
+## What's in it
 
-| | [pi](https://github.com/earendil-works/pi) | [Claude Code](https://claude.com/claude-code) |
+**Shared concepts** — the teaching philosophy, the graph format, the three modes. Both implementations carry these; see [PORTING.md](PORTING.md) for the file pairs.
+
+**`.claude/`** — the Claude Code implementation.
+
+- `skills/teach/` — the philosophy and the process
+- `skills/review/` — find what decayed in a subject, re-teach only that
+- `skills/synthesize/` — teach across two subjects, where the connection survives verification
+- `skills/graph/` — the on-disk format for graphs, bridges, and the mastery ledger, plus the validator
+- `skills/visualize/` — adds a minimal mermaid diagram when an idea is clearer as a picture
+- `agents/researcher.md` — web research and fact verification
+
+**`skills/`, `agents/`, `extensions/`** — the pi implementation.
+
+- The same five skills, plus the subagents and TypeScript extensions pi needs
+- `extensions/quiz/` — graded questions with instant ✓/✗ feedback in the terminal
+- `extensions/md-log/` — mirrors the session into a markdown file automatically
+- `extensions/mastery-ledger/` — records quiz outcomes by hooking the quiz tool result
+- `extensions/visual-tools/` — renders mermaid and SVG to images for the diagram subagents
+
+## Choosing an implementation
+
+| | [Claude Code](https://claude.com/claude-code) | [pi](https://github.com/earendil-works/pi) |
 |---|---|---|
-| Config tree | `skills/`, `agents/`, `extensions/` | `.claude/` |
-| Installs as | `.pi/` in your vault | `.claude/` in your vault |
-| Platform | macOS / Linux / WSL | Windows / macOS / Linux, native |
-| Graded quiz UI | Yes — custom TUI extension | No — questions are graded in chat |
-| Web research | Needs a separate package | Built in |
+| Installs as | `.claude/` in your vault | `.pi/` in your vault |
+| Windows | Native | WSL2 only |
+| Setup | Clone and run | Node, a subagent runner, apt packages |
+| Quizzes | Asked in chat, graded in the reply, 2–4 options | Custom terminal UI, more options, instant ✓/✗ |
+| Mastery ledger | Written by the model | Captured automatically from the tool result |
+| Web research | Built in | Needs a separate package |
+| Diagrams | Mermaid written into the note | Rendered to PNG and visually verified first |
 
-**Claude Code is the easier start**, particularly on Windows: no WSL, no tmux, no second Node install, and the researcher works out of the box — which matters, because the researcher is what verifies cross-domain bridges before they get taught.
+**Claude Code is the easier start, and the only one that runs natively on Windows.** It's also the only one where bridge verification actually works out of the box — pi's researcher declares `web_search`/`web_fetch`, which pi does not itself provide.
 
-## Install — Claude Code
+**pi gives a better quiz experience and a more trustworthy ledger.** Its quiz is a real graded UI rather than a chat question, and because an extension captures outcomes from the tool result, the record can't drift from what happened. On Claude Code the model writes the ledger itself — the validator catches a malformed entry, but nothing catches a forgotten one.
 
-Your vault is an ordinary folder; the config goes inside it.
+## Running the pi version
 
-```bash
-mkdir MyLearning && cd MyLearning
-git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git /tmp/als
-cp -r /tmp/als/.claude .
-mkdir graphs && touch calc2.md
-claude
-```
+Requirements:
 
-Then just say what you want: *"teach me integration by parts"*, *"review calc 2"*, or *"connect calc 2 and finance"*. Open the same folder as an Obsidian vault to read lessons rendered, with maths and diagrams.
-
-Keep your vault out of version control — graphs and lesson notes are personal, the config is what's shared.
-
-## Install — pi
-
-This repo **is** a `.pi` directory. From your learning project's root:
+- [pi](https://github.com/earendil-works/pi), and Node 22.19+ (pi 0.85 requires it)
+- A subagent runner for the researcher and diagram makers — [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) (tmux only)
+- The bundled `ask-user-question` extension. If your setup already has one, use **this** copy in its place: popups serialize through a shared UI lock that only works when it's the same implementation.
+- A web-search package if you want the researcher to actually search — pi provides no `web_search` tool of its own.
 
 ```bash
 git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git .pi
 ```
 
-Then open pi in that directory. (Or copy the pieces you want into your existing project config.)
+### On Windows, pi needs WSL2
 
-## Requirements
-
-- [pi](https://github.com/earendil-works/pi)
-- A subagent implementation, so the system can spawn the researcher and the visual makers. Recommended: [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) (tmux only). With it, everything works out of the box. Any other implementation works too, but expect to adapt the agent definitions, e.g. `agents/researcher.md` lists `safe_bash` in its tools, which is specific to that extension.
-- `ask-user-question` — use the copy bundled here. If your setup already has an `ask-user-question` extension, use **this** one in its place. Popups from different extensions serialize through a shared UI lock, which only works when it's the same implementation.
-- Node 22.19+ (pi 0.85 requires it).
-
-## Running on Windows
-
-Run it inside **WSL2**, not native Windows. The subagent runner is tmux-only, and tmux has no native Windows build — without it you lose the researcher and the diagram makers, which means no bridge verification in combine mode.
+tmux has no native Windows build, and without it you lose the researcher and diagram makers.
 
 ```bash
 # inside WSL (Ubuntu)
-nvm install 22                                   # a LINUX node — see the gotcha below
+nvm install 22
 npm i -g @earendil-works/pi-coding-agent
-sudo apt install -y tmux librsvg2-bin chromium-browser   # diagram rendering
-cd extensions/visual-tools && npm install        # bundles mermaid-cli
+sudo apt install -y tmux librsvg2-bin chromium-browser
+cd .pi/extensions/visual-tools && npm install
 ```
 
-**Gotcha:** in a fresh WSL install, `npm` often resolves to your *Windows* nvm binary through PATH interop while `node` is missing from the Linux PATH entirely. Check with `which node npm` — both must be under your Linux home, not `/mnt/c/...`. Install a Linux node before anything else or you'll get confusing failures.
+**Gotcha:** in a fresh WSL install `npm` often resolves to your *Windows* nvm binary through PATH interop while `node` is missing from the Linux PATH entirely. Check with `which node npm` — both must be under your Linux home, not `/mnt/c/...`. Install a Linux node first or you'll get confusing failures.
 
 Keep the vault under `/mnt/c/...` so Obsidian reads it natively from Windows. These are small markdown files, so the filesystem-bridge cost is irrelevant, and `\\wsl$\` mounts are flakier for Obsidian.
 
-If mermaid can't find your browser, set `PUPPETEER_EXECUTABLE_PATH` (or `CHROME_PATH`) to it — browser discovery checks that first, then known install paths, then your PATH.
+If mermaid can't find your browser, set `PUPPETEER_EXECUTABLE_PATH` (or `CHROME_PATH`). Browser discovery checks that first, then known install paths for macOS and Linux, then your PATH.
 
 ## Notes
 
-You can run the system without subagents. The main session does the teaching. You just lose the researcher (truth verification) and the generated visuals.
+Both versions run without subagents — the main session does the teaching. You lose truth verification and generated visuals, which matters most in combine mode, where an unverified bridge is exactly the failure that mode exists to prevent.
 
-The teaching skill is written for one learner (me). Edit the skill to fit how you learn best.
+The teaching skill was written for one learner. Edit it to fit how you learn best — that's the point of it being a config rather than a product.
