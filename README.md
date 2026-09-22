@@ -105,20 +105,90 @@ pi runs **natively on Windows** (it uses Git Bash), as well as macOS and Linux. 
 
 Requirements:
 
-- [pi](https://github.com/earendil-works/pi), and Node 22.19+ (pi 0.85 requires it)
+- [pi](https://github.com/earendil-works/pi) 0.87+, and Node 22.19+
+- **A model provider.** A Claude Pro/Max subscription **will not work** — Anthropic no longer lets third-party apps draw on plan limits. See [Model provider](#model-provider) below.
 - A multiplexer for the subagents: [WezTerm](https://wezfurlong.org/wezterm/) (all platforms), or cmux / tmux / zellij on Unix
 - [pi-interactive-subagents](https://github.com/HazAT/pi-interactive-subagents) — use **this upstream project**, which supports all four multiplexers. The `amosblomqvist` fork linked by the original README is explicitly tmux-only.
 - The bundled `ask-user-question` extension. If your setup already has one, use **this** copy in its place: popups serialize through a shared UI lock that only works when it's the same implementation.
 - A search API key, if you want the researcher to actually search (see below)
 
-```bash
-# in your vault
-git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git .pi
+### Windows quickstart
+
+Do these in order. Steps 1–5 are once, ever.
+
+**1. Node and pi**
+
+```powershell
+nvm install 22.19.0
+nvm use 22.19.0
 npm i -g @earendil-works/pi-coding-agent
-cd .pi/extensions/visual-tools && npm install && cd ../../..
 ```
 
-Then run `pi` **inside WezTerm** — no wrapper needed; it detects the multiplexer itself. On Unix you can instead use `tmux new -A -s pi 'pi'`, `cmux pi`, or `zellij --session pi`.
+**2. WezTerm** — needed for subagents (researcher, diagram makers)
+
+```powershell
+winget install wez.wezterm
+```
+
+**3. The vault** — an ordinary folder; config goes inside it
+
+```powershell
+mkdir $HOME\Documents\MyLearning
+cd $HOME\Documents\MyLearning
+git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git .pi
+mkdir graphs
+New-Item calc2.md
+cd .pi\extensions\visual-tools; npm install; cd ..\..\..
+```
+
+**4. API keys** — set them *before* opening the terminal you'll run pi in
+
+```powershell
+setx OPENROUTER_API_KEY "sk-or-v1-..."
+setx TAVILY_API_KEY "tvly-..."
+```
+
+**5. Point pi at the key instead of storing a copy.** Create or edit `%USERPROFILE%\.pi\agent\auth.json`:
+
+```json
+{ "openrouter": { "type": "api_key", "key": "$OPENROUTER_API_KEY" } }
+```
+
+pi resolves `$OPENROUTER_API_KEY` from the environment at call time, so the secret lives in one place and `auth.json` never holds it. **Do this rather than pasting the key into `/login`** — auth-file credentials take priority over environment variables, so a bad paste silently overrides a perfectly good variable.
+
+**6. Every session** — open **WezTerm** (not VS Code's terminal), then:
+
+```powershell
+cd $HOME\Documents\MyLearning
+pi.cmd
+```
+
+Two details that matter: it's `pi.cmd`, not `pi` (PowerShell blocks npm's `.ps1` shim unless you've changed your execution policy), and you **must `cd` into the vault first** — pi loads `.pi/` from the current directory, and launching elsewhere silently gives you no skills and no extensions.
+
+You should see `graph, review, synthesize, teach, visualize` under `[Skills]` and six entries under `[Extensions]`. If not, you're in the wrong directory.
+
+**7. Teach something**
+
+```
+/md-log calc2.md
+teach me integration by parts
+```
+
+### On macOS and Linux
+
+Same steps, minus the Windows-specific parts: `pi` rather than `pi.cmd`, `export` rather than `setx`. You can use any supported multiplexer — `tmux new -A -s pi 'pi'`, `cmux pi`, or `zellij --session pi` — or WezTerm, which needs no wrapper since pi detects it.
+
+### Model provider
+
+**A Claude Pro/Max subscription does not power pi.** Anthropic meters third-party apps against a separate "extra usage" balance rather than plan limits, so `/login anthropic` authenticates fine and then every request fails with a 400 telling you to add extra usage. This is policy, not a pi bug, and nothing in pi can work around it.
+
+Working options:
+
+- **OpenRouter** — one key, any model, swap freely with `Ctrl+L`. Prepaid; `:free`-tagged models cost nothing but are rate-limited. This is the most vendor-neutral choice and what the setup above assumes.
+- **A free API tier** — Google Gemini, Groq, Cerebras and NVIDIA NIM are all in pi's provider list.
+- **Anthropic extra usage** — top up at `claude.ai/settings/usage` if you want Claude specifically.
+
+If you'd rather not deal with any of this, the Claude Code implementation is first-party and covered by a Claude subscription.
 
 ### Web search
 
@@ -134,6 +204,22 @@ Tavily is preferred when both are set: its results come with extracted page text
 ### Diagram rendering
 
 Mermaid needs a Chrome-family browser; SVG tries `rsvg-convert`, then that same browser, then ImageMagick. On Windows the browser is found automatically under `Program Files`; on Linux install `librsvg2-bin` and `chromium-browser`. If detection fails anywhere, set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_PATH` — those are checked first.
+
+### When it breaks
+
+Every one of these was hit during a real Windows setup. None of them fails in an obvious way.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `pi.ps1 cannot be loaded because running scripts is disabled` | PowerShell blocks npm's `.ps1` shim | Use `pi.cmd`. Or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` for plain `pi` |
+| pi starts but `/md-log` isn't a command, and no skills are listed | Launched outside the vault, so `.pi/` was never found | `cd` into the vault, relaunch. Check `[Skills]` lists five |
+| `400 … Third-party apps now draw from your extra usage` | Anthropic subscription can't power third-party apps | Use a different provider — see [Model provider](#model-provider) |
+| `401 Missing Authentication header` | pi has no usable credential for the selected provider | Check `auth.json`: an empty or malformed `key` **overrides** your environment variable |
+| `echo $env:YOUR_KEY` prints nothing right after `setx` | `setx` only affects *new* processes | Close the terminal, open a fresh one from the Start menu — not from another window |
+| Key looks set in the registry but pi still 401s | A stale terminal passed an empty value into `/login`, which stored it | Use the `"key": "$YOUR_VAR"` form in `auth.json` instead of pasting |
+| OAuth login fails with `EADDRINUSE 127.0.0.1:53692` | pi's callback port is hardcoded and something else holds it | Close whatever has it (VS Code is a common culprit) and retry |
+
+The pattern behind most of these: **a stale environment.** `setx` writes to the registry, but every already-running process keeps the environment it was born with — including terminals, and anything launched from them. After setting a variable, open a genuinely new window before doing anything else.
 
 ## Notes
 
