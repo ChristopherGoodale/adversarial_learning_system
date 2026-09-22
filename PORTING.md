@@ -6,7 +6,7 @@ This repo carries **two live implementations** of the same teaching system:
 |---|---|---|
 | Config tree | `skills/`, `agents/`, `extensions/` | `.claude/skills/`, `.claude/agents/` |
 | Installed as | `.pi/` in the vault | `.claude/` in the vault |
-| Platform | macOS / Linux / WSL | Windows / macOS / Linux, native |
+| Platform | Windows / macOS / Linux, native | Windows / macOS / Linux, native |
 
 Both are maintained. This file exists so mirroring a change is mechanical rather than archaeological.
 
@@ -18,12 +18,13 @@ Both are maintained. This file exists so mirroring a change is mechanical rather
 |---|---|---|
 | `skills/teach/SKILL.md` | `.claude/skills/teach/SKILL.md` | Philosophy and phases identical; quiz mechanics and persistence differ |
 | `skills/review/SKILL.md` | `.claude/skills/review/SKILL.md` | Ranking logic identical; CC notes the option cap |
-| `skills/synthesize/SKILL.md` | `.claude/skills/synthesize/SKILL.md` | Identical except verification, which actually works on CC |
+| `skills/synthesize/SKILL.md` | `.claude/skills/synthesize/SKILL.md` | Identical; verification works on both now that pi has `web-tools` |
 | `skills/graph/SKILL.md` | `.claude/skills/graph/SKILL.md` | Format spec identical; **ledger ownership differs** (see below) |
 | `skills/graph/validate.mjs` | `.claude/skills/graph/validate.mjs` | **Verbatim copy** — must stay byte-identical |
 | `skills/graph/examples/` | `.claude/skills/graph/examples/` | Verbatim copies |
 | `skills/visualize/SKILL.md` | `.claude/skills/visualize/SKILL.md` | Substantially different — see below |
-| `agents/researcher.md` | `.claude/agents/researcher.md` | Same output contract, different tools/model |
+| `agents/researcher.md` | `.claude/agents/researcher.md` | Same output contract and claim-assessment rules; different tools/model |
+| `extensions/web-tools/` | *(built in)* | pi needs the extension; Claude Code ships `WebSearch`/`WebFetch` |
 | `agents/mermaid-maker.md`, `agents/svg-maker.md` | *(none)* | Drove pi's custom render tools; no CC equivalent |
 | `extensions/*.ts` | *(none)* | pi-specific; their behaviour is folded into the CC skills |
 
@@ -41,7 +42,7 @@ diff -r skills/graph/examples .claude/skills/graph/examples
 | `quiz` (graded TUI extension) | `AskUserQuestion` + grading in the following message |
 | `ask_user_question` | `AskUserQuestion` |
 | `subagent(agent="x", task=…)` | `Agent` tool, `subagent_type: "x"` |
-| `web_search`, `web_fetch` | `WebSearch`, `WebFetch` |
+| `web_search`, `web_fetch` (from `extensions/web-tools/`) | `WebSearch`, `WebFetch` (built in) |
 | `read` | `Read` |
 | `safe_bash` | `Bash` |
 | `/md-log <file>` | Write the lesson note directly with `Write`/`Edit` |
@@ -72,3 +73,34 @@ If you ever want the pi guarantee back on CC, a `PostToolUse` hook on `AskUserQu
 2. Mirror it into the Claude Code file, remapping tool names via the table above.
 3. If you touched `validate.mjs` or `examples/`, copy rather than re-edit, then run both `diff`s above.
 4. Run the validator against both example trees.
+
+## Gotchas that cost real debugging time
+
+Recorded because none of these fail loudly — each one silently produces a
+half-working system.
+
+**`typebox`, not `@sinclair/typebox`.** pi 0.85 provides `typebox@1.3.x` to
+extensions. The old scoped name resolves only if the extension ships its own
+`node_modules`, which `extensions/quiz.ts` and `extensions/ask-user-question.ts`
+do not. Getting this wrong stops the graded quiz loading at all.
+
+**pi discovers `.pi/extensions/*.ts` and `*/index.ts` — nothing nested.** A tool
+defined in `extensions/foo/tools/bar.ts` is never auto-loaded; its factory has to
+be called from the directory's `index.ts`. This is why `visual-tools/index.ts`
+invokes both tool factories directly.
+
+**The two subagent projects are not interchangeable.** The tmux-only
+`amosblomqvist` fork launches children with `--no-extensions` and injects each
+tool-backing extension explicitly via a `registerToolExtension` global. Upstream
+`HazAT` defines no such global and lets children inherit normal discovery.
+`visual-tools/index.ts` is written to satisfy both: it registers directly *and*
+keeps the fork hook, which no-ops upstream.
+
+**A subagent's `tools:` frontmatter takes native pi tools only** — `read`,
+`bash`, `edit`, `write`, `grep`, `find`, `ls`. Extension tools arrive by
+inheritance and are trimmed with `deny-tools`. Listing `web_search` there does
+not grant it.
+
+**Windows `spawn()` cannot run a `node_modules/.bin` shim**, which is a `.cmd`
+wrapper there. Spawn `process.execPath` with the package's real entry point
+instead — see `MMDC_ENTRY` in `tools/mermaid_tools.ts`.

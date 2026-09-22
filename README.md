@@ -81,53 +81,59 @@ You don't need a separate project per subject: one vault, one config, one graph 
 - `extensions/md-log/` — mirrors the session into a markdown file automatically
 - `extensions/mastery-ledger/` — records quiz outcomes by hooking the quiz tool result
 - `extensions/visual-tools/` — renders mermaid and SVG to images for the diagram subagents
+- `extensions/web-tools/` — `web_search` / `web_fetch`, so the researcher can actually verify things
 
 ## Choosing an implementation
 
 | | [Claude Code](https://claude.com/claude-code) | [pi](https://github.com/earendil-works/pi) |
 |---|---|---|
 | Installs as | `.claude/` in your vault | `.pi/` in your vault |
-| Windows | Native | WSL2 only |
-| Setup | Clone and run | Node, a subagent runner, apt packages |
-| Quizzes | Asked in chat, graded in the reply, 2–4 options | Custom terminal UI, more options, instant ✓/✗ |
-| Mastery ledger | Written by the model | Captured automatically from the tool result |
-| Web research | Built in | Needs a separate package |
-| Diagrams | Mermaid written into the note | Rendered to PNG and visually verified first |
+| Windows | Native | Native (via WezTerm) |
+| Setup | Clone and run | Node, a terminal multiplexer, a subagent package |
+| Quizzes | Asked in chat, graded in the reply, 2–4 options | **Custom terminal UI, more options, instant ✓/✗** |
+| Mastery ledger | Written by the model | **Captured automatically from the tool result** |
+| Web research | Built in | Needs an API key (Tavily or Brave) |
+| Diagrams | Mermaid written into the note | **Rendered to PNG and visually verified first** |
 
-**Claude Code is the easier start, and the only one that runs natively on Windows.** It's also the only one where bridge verification actually works out of the box — pi's researcher declares `web_search`/`web_fetch`, which pi does not itself provide.
+**Claude Code is the easier start** — clone, run, done, with web search already working.
 
-**pi gives a better quiz experience and a more trustworthy ledger.** Its quiz is a real graded UI rather than a chat question, and because an extension captures outcomes from the tool result, the record can't drift from what happened. On Claude Code the model writes the ledger itself — the validator catches a malformed entry, but nothing catches a forgotten one.
+**pi gives a better quiz experience, a more trustworthy ledger, and verified diagrams.** Its quiz is a real graded UI rather than a chat question; because an extension captures outcomes from the tool result, the record can't drift from what happened; and the diagram subagents look at the rendered image before returning it. On Claude Code the model writes the ledger itself — the validator catches a malformed entry, but nothing catches a forgotten one.
 
 ## Running the pi version
+
+pi runs **natively on Windows** (it uses Git Bash), as well as macOS and Linux. Subagents need a terminal multiplexer, and WezTerm is the one that works everywhere.
 
 Requirements:
 
 - [pi](https://github.com/earendil-works/pi), and Node 22.19+ (pi 0.85 requires it)
-- A subagent runner for the researcher and diagram makers — [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) (tmux only)
+- A multiplexer for the subagents: [WezTerm](https://wezfurlong.org/wezterm/) (all platforms), or cmux / tmux / zellij on Unix
+- [pi-interactive-subagents](https://github.com/HazAT/pi-interactive-subagents) — use **this upstream project**, which supports all four multiplexers. The `amosblomqvist` fork linked by the original README is explicitly tmux-only.
 - The bundled `ask-user-question` extension. If your setup already has one, use **this** copy in its place: popups serialize through a shared UI lock that only works when it's the same implementation.
-- A web-search package if you want the researcher to actually search — pi provides no `web_search` tool of its own.
+- A search API key, if you want the researcher to actually search (see below)
 
 ```bash
+# in your vault
 git clone https://github.com/ChristopherGoodale/adversarial_learning_system.git .pi
+npm i -g @earendil-works/pi-coding-agent
+cd .pi/extensions/visual-tools && npm install && cd ../../..
 ```
 
-### On Windows, pi needs WSL2
+Then run `pi` **inside WezTerm** — no wrapper needed; it detects the multiplexer itself. On Unix you can instead use `tmux new -A -s pi 'pi'`, `cmux pi`, or `zellij --session pi`.
 
-tmux has no native Windows build, and without it you lose the researcher and diagram makers.
+### Web search
+
+pi ships no web tools at all, so `extensions/web-tools/` provides `web_search` and `web_fetch`. Set **one** of these and restart pi:
 
 ```bash
-# inside WSL (Ubuntu)
-nvm install 22
-npm i -g @earendil-works/pi-coding-agent
-sudo apt install -y tmux librsvg2-bin chromium-browser
-cd .pi/extensions/visual-tools && npm install
+TAVILY_API_KEY=tvly-...     # https://tavily.com — preferred
+BRAVE_API_KEY=BSA...        # https://brave.com/search/api/
 ```
 
-**Gotcha:** in a fresh WSL install `npm` often resolves to your *Windows* nvm binary through PATH interop while `node` is missing from the Linux PATH entirely. Check with `which node npm` — both must be under your Linux home, not `/mnt/c/...`. Install a Linux node first or you'll get confusing failures.
+Tavily is preferred when both are set: its results come with extracted page text, so neither tool has to parse HTML. With no key, both tools report that search is **unavailable** rather than returning nothing — so the researcher says it couldn't check, instead of quietly answering from memory.
 
-Keep the vault under `/mnt/c/...` so Obsidian reads it natively from Windows. These are small markdown files, so the filesystem-bridge cost is irrelevant, and `\\wsl$\` mounts are flakier for Obsidian.
+### Diagram rendering
 
-If mermaid can't find your browser, set `PUPPETEER_EXECUTABLE_PATH` (or `CHROME_PATH`). Browser discovery checks that first, then known install paths for macOS and Linux, then your PATH.
+Mermaid needs a Chrome-family browser; SVG tries `rsvg-convert`, then that same browser, then ImageMagick. On Windows the browser is found automatically under `Program Files`; on Linux install `librsvg2-bin` and `chromium-browser`. If detection fails anywhere, set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_PATH` — those are checked first.
 
 ## Notes
 

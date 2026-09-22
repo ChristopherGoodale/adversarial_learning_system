@@ -36,6 +36,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
+import mermaidToolsExtension from "./tools/mermaid_tools.ts"
+import svgToolsExtension from "./tools/svg_tools.ts"
 
 const EXT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const MERMAID_TOOLS = path.join(EXT_DIR, "tools", "mermaid_tools.ts")
@@ -68,6 +70,18 @@ function registerToolExtensions(): void {
 }
 
 export default function (pi: ExtensionAPI) {
+  // Register the six tools directly. pi auto-discovers `.pi/extensions/*/index.ts`
+  // but NOT nested files like `tools/mermaid_tools.ts`, so this is what puts them
+  // in every session — including a subagent's child process, which inherits
+  // normal extension discovery under the upstream subagents package.
+  //
+  // The registerToolExtensions() hook below only does anything under the
+  // tmux-only fork, which launches children with `--no-extensions` and injects
+  // each tool-backing extension explicitly. Upstream defines no such global and
+  // the call no-ops, so both runners work from this one file.
+  mermaidToolsExtension(pi)
+  svgToolsExtension(pi)
+
   pi.on("session_start", async () => {
     registerToolExtensions()
   })

@@ -20,10 +20,11 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
-import { Type } from "@sinclair/typebox"
+import { Type } from "typebox"
 import {
   applyEdit,
   existsSync,
+  findChrome,
   join,
   mkdirSync,
   publish,
@@ -39,25 +40,97 @@ const GROUP = "svg"
 const BODY_FILE = "diagram.svg"
 const RENDER_TIMEOUT_MS = 60_000
 
+// Used only when an SVG declares neither usable width/height nor a viewBox.
+const FALLBACK_WIDTH = 960
+const FALLBACK_HEIGHT = 720
+
 type RenderDetails = { ok: boolean; path: string; filename?: string }
 
 let session: Session | null = null
 
-/** Render an SVG file to PNG via rsvg-convert, falling back to magick. */
+/** Pixel dimensions from the SVG's width/height, falling back to its viewBox. */
+export function svgDimensions(source: string): { width: number; height: number } {
+  const attr = (name: string) => new RegExp(`<svg[^>]*?\\s${name}\\s*=\\s*"([^"]*)"`, "i").exec(source)?.[1]
+  const px = (v: string | undefined) => {
+    const m = v ? /^\s*([0-9]*\.?[0-9]+)\s*(px)?\s*$/.exec(v) : null
+    return m ? Number(m[1]) : undefined
+  }
+
+  const w = px(attr("width"))
+  const h = px(attr("height"))
+  if (w && h) return { width: Math.ceil(w), height: Math.ceil(h) }
+
+  // Percentage or unit-suffixed width/height land here too — the viewBox is the
+  // reliable source of intrinsic size.
+  const box = attr("viewBox")?.trim().split(/[\s,]+/).map(Number)
+  if (box?.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0) {
+    return { width: Math.ceil(box[2]), height: Math.ceil(box[3]) }
+  }
+
+  return { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT }
+}
+
+/**
+ * Screenshot the SVG with headless Chrome. The markup is inlined into a page
+ * sized exactly to it: referencing the .svg as a subresource would be subject
+ * to Chrome's file:// access rules, while inline markup always loads.
+ */
+async function renderWithChrome(source: string, outPath: string, workDir: string) {
+  const chrome = findChrome()
+  if (!chrome) return null
+
+  const { width, height } = svgDimensions(source)
+  const htmlPath = join(workDir, "svg-shot.html")
+  writeFileSync(
+    htmlPath,
+    `<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:#fff}svg{display:block}</style>
+${source}`,
+    "utf8",
+  )
+
+  const args = (headless: string) => [
+    headless,
+    "--disable-gpu",
+    "--hide-scrollbars",
+    `--screenshot=${outPath}`,
+    `--window-size=${width},${height}`,
+    "--force-device-scale-factor=2",
+    htmlPath,
+  ]
+
+  const res = await run(chrome, args("--headless=new"), { cwd: workDir, timeoutMs: RENDER_TIMEOUT_MS })
+  if (res.code === 0 && existsSync(outPath)) return res
+  // Chrome before 112 only understands the bare flag.
+  return await run(chrome, args("--headless"), { cwd: workDir, timeoutMs: RENDER_TIMEOUT_MS })
+}
+
+/**
+ * Render an SVG file to PNG. rsvg-convert first — its font handling is the best
+ * of the three — then headless Chrome, which is already required for mermaid and
+ * is the only one of the three that exists on a stock Windows box, then
+ * ImageMagick as a last resort.
+ */
 async function renderSvg(svgPath: string, outPath: string, workDir: string) {
   // rsvg-convert renders at the SVG's intrinsic size; -z 2 doubles it for crispness.
-  let res = await run("rsvg-convert", ["-z", "2", svgPath, "-o", outPath], {
+  const rsvg = await run("rsvg-convert", ["-z", "2", svgPath, "-o", outPath], {
     cwd: workDir,
     timeoutMs: RENDER_TIMEOUT_MS,
   })
-  if (res.code === 0 && existsSync(outPath)) return { ok: true as const, res }
-  // Fallback: ImageMagick. -density 192 (~2x of 96dpi) for a crisp raster.
+  if (rsvg.code === 0 && existsSync(outPath)) return { ok: true as const, res: rsvg }
+
+  const chrome = await renderWithChrome(readFileSync(svgPath, "utf8"), outPath, workDir)
+  if (chrome && chrome.code === 0 && existsSync(outPath)) return { ok: true as const, res: chrome }
+
+  // Last resort: ImageMagick. -density 192 (~2x of 96dpi) for a crisp raster.
   const magick = await run("magick", ["-density", "192", "-background", "white", svgPath, outPath], {
     cwd: workDir,
     timeoutMs: RENDER_TIMEOUT_MS,
   })
   if (magick.code === 0 && existsSync(outPath)) return { ok: true as const, res: magick }
-  return { ok: false as const, res: res.code !== null ? res : magick }
+
+  // Report whichever attempt actually ran, preferring the most informative.
+  return { ok: false as const, res: chrome ?? (rsvg.code !== null ? rsvg : magick) }
 }
 
 export default function svgToolsExtension(pi: ExtensionAPI) {
@@ -161,7 +234,7 @@ export default function svgToolsExtension(pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text: `${note}SVG render FAILED — no image produced (tried rsvg-convert then magick). Fix the source with edit_svg and call render_svg again.\n\nError:\n${detail}`,
+              text: `${note}SVG render FAILED — no image produced (tried rsvg-convert, then headless Chrome, then magick). Fix the source with edit_svg and call render_svg again.\n\nError:\n${detail}`,
             },
           ],
           details: { ok: false, path: "" } as RenderDetails,

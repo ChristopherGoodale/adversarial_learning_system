@@ -24,6 +24,23 @@ export const EXTRA_PATH = ["/opt/local/bin", "/usr/local/bin", "/opt/homebrew/bi
 export const STAGING_ROOT = join(tmpdir(), "pi-visual-tools")
 export const FILES_DIRNAME = "viz"
 
+/** Windows install roots, read from the environment rather than hardcoding C:. */
+function windowsChromeCandidates(): string[] {
+  const roots = [
+    process.env.PROGRAMFILES,
+    process.env["PROGRAMFILES(X86)"],
+    process.env.LOCALAPPDATA,
+  ].filter((r): r is string => Boolean(r))
+
+  const suffixes = [
+    join("Google", "Chrome", "Application", "chrome.exe"),
+    join("Chromium", "Application", "chrome.exe"),
+    join("Microsoft", "Edge", "Application", "msedge.exe"),
+  ]
+
+  return roots.flatMap((root) => suffixes.map((s) => join(root, s)))
+}
+
 export const CHROME_CANDIDATES = [
   // macOS
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -34,9 +51,20 @@ export const CHROME_CANDIDATES = [
   "/usr/bin/chromium",
   "/usr/bin/chromium-browser",
   "/snap/bin/chromium",
+  // Windows
+  ...windowsChromeCandidates(),
 ]
 
-const CHROME_BINARIES = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+// Bare names the PATH scan tries. The .exe entries matter on Windows, where the
+// binary is never called `google-chrome`.
+const CHROME_BINARIES = [
+  "google-chrome",
+  "google-chrome-stable",
+  "chromium",
+  "chromium-browser",
+  "chrome.exe",
+  "msedge.exe",
+]
 
 /**
  * Locate a browser for mermaid-cli to drive. Checked in priority order:
